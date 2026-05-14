@@ -1,0 +1,5 @@
+# Terraform files must keep LF line endings regardless of platform autocrlf settings
+*.tf             text eol=lf
+*.tfvars         text eol=lf
+*.tfvars.example text eol=lf
+*.tfvars.json    text eol=lf
