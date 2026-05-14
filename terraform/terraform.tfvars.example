@@ -1,0 +1,7 @@
+# terraform.tfvars
+# Provides concrete values for the declared variables
+# Template for terraform.tfvars
+# Add your variables accordingly
+
+project_id = "project-id-from-gcp"
+region     = "region-in-gcp"
