@@ -1,0 +1,54 @@
+name: Terraform Lint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.tf"
+      - "terraform/.tflint.hcl"
+      - ".github/workflows/terraform-lint.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/*.tf"
+      - "terraform/.tflint.hcl"
+      - ".github/workflows/terraform-lint.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-lint:
+    name: fmt / validate / tflint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.4"
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.62.1
+
+      - name: TFLint init
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: TFLint
+        run: tflint --recursive
