@@ -3,3 +3,7 @@
 *.tfvars         text eol=lf
 *.tfvars.example text eol=lf
 *.tfvars.json    text eol=lf
+
+# Shell scripts and bootstrap env templates must keep LF line endings
+*.sh             text eol=lf
+*.env.example    text eol=lf
