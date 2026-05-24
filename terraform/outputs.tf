@@ -26,3 +26,20 @@ output "services_range_name" {
   description = "Secondary range name for GKE service IPs"
   value       = module.network.services_range_name
 }
+
+output "cluster_name" {
+  description = "Name of the GKE cluster"
+  value       = module.cluster.cluster_name
+}
+
+output "cluster_endpoint" {
+  description = "IP endpoint of the GKE cluster control plane"
+  value       = module.cluster.cluster_endpoint
+  sensitive   = true
+}
+
+output "cluster_ca_certificate" {
+  description = "Base64-encoded cluster CA certificate"
+  value       = module.cluster.cluster_ca_certificate
+  sensitive   = true
+}

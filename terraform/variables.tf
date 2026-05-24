@@ -11,3 +11,9 @@ variable "region" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "zone" {
+  description = "The GCP zone for zonal resources (e.g. the GKE cluster)"
+  type        = string
+  default     = "europe-west1-b"
+}
