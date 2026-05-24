@@ -78,3 +78,8 @@ output "crossplane_provider_gcp_sa_email" {
   description = "Email of the Crossplane provider-gcp Google Service Account"
   value       = module.iam.crossplane_provider_gcp_sa_email
 }
+
+output "backup_bucket_name" {
+  description = "Name of the CloudNativePG per-tenant backup bucket"
+  value       = module.backup.bucket_name
+}

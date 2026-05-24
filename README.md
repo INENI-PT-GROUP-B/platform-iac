@@ -62,3 +62,4 @@ The root module under `terraform/` composes the per-concern child modules:
 - `cluster/` — Standard zonal GKE cluster with Workload Identity and Dataplane V2
 - `dns/` — Public Cloud DNS managed zone for the platform domain `fhuebung.lol`, with zone-scoped `roles/dns.admin` bindings for the ExternalDNS and cert-manager service accounts
 - `iam/` — Google Service Accounts and Workload Identity bindings for in-cluster platform workloads (ExternalDNS, cert-manager, ESO, Crossplane provider-gcp)
+- `backup/` — Shared GCS bucket for CloudNativePG per-tenant database backups (Barman, 30-day retention), with bucket-scoped IAM letting Crossplane provider-gcp add per-tenant prefix-scoped write bindings
