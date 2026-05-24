@@ -12,19 +12,31 @@ This document describes the DNS configuration for the platform domain `fhuebung.
 | GCP Project | `dotted-axle-495612-f4` (display name: `platform-engineering-group-b`) |
 | Managed Zone | `platform-zone` |
 | Visibility | Public |
+| DNSSEC | Off (zone and registrar) |
+| Management | Terraform — `terraform/dns/` module, wired into the root module |
 
 ## Provider Decision
 
-We chose **Google Cloud DNS (Pfad A)** over Cloudflare for the following reasons:
+We chose **Google Cloud DNS** over Cloudflare for the following reasons:
 
 - Tight integration with our GKE platform via Workload Identity (no external API token needed for ExternalDNS / cert-manager)
 - IAM-driven access management — no separate Cloudflare account / API-token rotation
 - Single billing context (GCP project)
 - Sufficient feature set for ExternalDNS (`txtOwnerId` based ownership) and cert-manager (DNS-01 challenge)
 
+## Terraform Management
+
+The zone is defined in code in the `terraform/dns/` module and composed by the root module as `module "dns"`. The root module also feeds the module the ExternalDNS and cert-manager service-account emails from the `iam` module, so the module creates a zone-scoped `roles/dns.admin` binding for each (Workload Identity, no static credentials).
+
+The zone is **created fresh by Terraform** during `bootstrap.sh` — it is **not** imported. We deliberately avoid `terraform import`: importing leaves a manual, non-reproducible step in the provisioning path and breaks the one-command bootstrap promise — a clean run on an empty project must create the zone itself. The out-of-band zone (created early to unblock NS delegation) holds no records we need to preserve, so a delete-and-recreate is safe.
+
+The coordinated, destructive delete-and-recreate of the existing zone, plus the follow-up Porkbun nameserver update, is an operational step (it needs `gcloud` and registrar access during a bootstrap run), tracked separately in [issue #28](https://github.com/INENI-PT-GROUP-B/platform-iac/issues/28). Until that run happens, the live delegation still points at the out-of-band zone's nameservers listed below.
+
 ## Authoritative Nameservers
 
-The Google-managed nameservers for `platform-zone`:
+Google assigns four authoritative nameservers when the managed zone is created. They are delegated at Porkbun under **Authoritative Nameservers** for `fhuebung.lol`.
+
+The nameservers of the current out-of-band zone:
 
 ```
 ns-cloud-e1.googledomains.com
@@ -33,7 +45,9 @@ ns-cloud-e3.googledomains.com
 ns-cloud-e4.googledomains.com
 ```
 
-These are configured at Porkbun under **Authoritative Nameservers** for `fhuebung.lol`.
+> **Note:** The Terraform recreate provisions a fresh zone, for which Google may assign a **different** nameserver set. After the recreate, read the new servers (see [gcloud / Terraform commands](#gcloud--terraform-commands)) and update them at Porkbun if they differ. DNSSEC stays off at the registrar.
+
+NS-record TTL is `21600s` (6h) — full global propagation can take up to 24h, but typically completes within 15 minutes to a few hours.
 
 ## Verification
 
@@ -51,11 +65,15 @@ dig NS fhuebung.lol +short
 whois fhuebung.lol | grep -i "name server"
 ```
 
-Expected output: the four `ns-cloud-eX.googledomains.com` entries.
+Expected output: the four `ns-cloud-eX.googledomains.com` entries assigned to the zone.
 
-NS-record TTL is `21600s` (6h) — full global propagation can take up to 24h, but typically completes within 15 minutes to a few hours.
+## gcloud / Terraform commands
 
-## gcloud Commands
+Read the zone's nameservers from Terraform after apply:
+
+```bash
+terraform -chdir=terraform output dns_name_servers
+```
 
 List managed zones in the active project:
 
@@ -79,20 +97,11 @@ gcloud dns record-sets list --zone=platform-zone \
 
 ## Migration Notes
 
-A previous zone existed in the legacy project `ineni-pt-group-b`. After the project switch to `dotted-axle-495612-f4`, a new zone was created and the NS-records at Porkbun were updated to the new `ns-cloud-eX` servers. The legacy zone will be deleted once full propagation is confirmed.
-
-## Sprint 2 — OpenTofu Import
-
-The zone was created manually to unblock NS-delegation early. When the IaC code for DNS is added in Sprint 2, the existing zone must be imported instead of recreated:
-
-```bash
-tofu import google_dns_managed_zone.platform_zone \
-  projects/dotted-axle-495612-f4/managedZones/platform-zone
-```
+A previous zone existed in the legacy project `ineni-pt-group-b`. After the project switch to `dotted-axle-495612-f4`, a new zone was created out-of-band and the NS records at Porkbun were updated to the new `ns-cloud-eX` servers. That out-of-band zone is the one the Terraform recreate replaces (see [Terraform Management](#terraform-management)).
 
 ## Downstream Consumers
 
-- **ExternalDNS** — will manage `A` / `CNAME` records under `*.fhuebung.lol` for tenant ingresses
-- **cert-manager** — will solve ACME DNS-01 challenges by writing `TXT` records to the zone
+- **ExternalDNS** — manages `A` / `CNAME` records under `*.fhuebung.lol` for tenant ingresses
+- **cert-manager** — solves ACME DNS-01 challenges by writing `TXT` records to the zone
 
-Both components require IAM bindings on the zone (`roles/dns.admin` scoped to the zone resource); these will be provisioned in Sprint 2 IaC.
+Both components authenticate via Workload Identity. Their zone-scoped `roles/dns.admin` bindings are defined in the `dns/` module and wired from the `iam` module by the root module (no separate manual IAM step).
