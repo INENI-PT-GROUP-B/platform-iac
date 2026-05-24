@@ -22,13 +22,18 @@ module "cluster" {
   services_range_name = module.network.services_range_name
 }
 
-# DNS: public Cloud DNS managed zone for the platform domain. The zone-scoped
-# roles/dns.admin binding for ExternalDNS and cert-manager is wired from the IAM
-# module later (see platform-iac#22); until then no bindings are created.
+# DNS: public Cloud DNS managed zone for the platform domain, with the
+# zone-scoped roles/dns.admin binding granted to the ExternalDNS and
+# cert-manager service accounts from the IAM module.
 module "dns" {
   source = "./dns"
 
   project_id = var.project_id
+
+  dns_admin_service_accounts = [
+    module.iam.external_dns_sa_email,
+    module.iam.cert_manager_sa_email,
+  ]
 }
 
 # IAM: Google Service Accounts and Workload Identity bindings for in-cluster
