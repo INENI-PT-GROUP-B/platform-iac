@@ -53,3 +53,11 @@ Two deliberate properties of this setup:
 - The state bucket is **intentionally not managed by Terraform** to avoid the bootstrap paradox (Terraform would need state before any state exists).
 
 The full one-command bootstrap (GCP API enablement, `terraform apply`, kubeconfig retrieval, and the Argo CD bootstrap) is added to `bootstrap/bootstrap.sh` in a later task. At this stage the script only establishes the Terraform state backend.
+
+## Modules
+
+The root module under `terraform/` composes the per-concern child modules:
+
+- `network/` — VPC, subnetwork with GKE secondary ranges, baseline firewall rules
+- `cluster/` — Standard zonal GKE cluster with Workload Identity and Dataplane V2
+- `iam/` — Google Service Accounts and Workload Identity bindings for in-cluster platform workloads (ExternalDNS, cert-manager, ESO, Crossplane provider-gcp)

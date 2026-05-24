@@ -30,3 +30,15 @@ module "dns" {
 
   project_id = var.project_id
 }
+
+# IAM: Google Service Accounts and Workload Identity bindings for in-cluster
+# platform workloads (ExternalDNS, cert-manager, ESO, Crossplane provider-gcp).
+# The cluster module enables the Workload Identity pool referenced by the
+# bindings; depends_on declares that ordering explicitly.
+module "iam" {
+  source = "./iam"
+
+  project_id = var.project_id
+
+  depends_on = [module.cluster]
+}
