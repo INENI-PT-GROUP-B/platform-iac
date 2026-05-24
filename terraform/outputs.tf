@@ -43,3 +43,18 @@ output "cluster_ca_certificate" {
   value       = module.cluster.cluster_ca_certificate
   sensitive   = true
 }
+
+output "dns_zone_name" {
+  description = "Name of the Cloud DNS managed zone"
+  value       = module.dns.zone_name
+}
+
+output "dns_name" {
+  description = "Fully-qualified DNS name of the managed zone (with trailing dot)"
+  value       = module.dns.dns_name
+}
+
+output "dns_name_servers" {
+  description = "Authoritative nameservers for the zone (set at the registrar)"
+  value       = module.dns.name_servers
+}

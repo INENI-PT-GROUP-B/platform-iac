@@ -21,3 +21,12 @@ module "cluster" {
   pods_range_name     = module.network.pods_range_name
   services_range_name = module.network.services_range_name
 }
+
+# DNS: public Cloud DNS managed zone for the platform domain. The zone-scoped
+# roles/dns.admin binding for ExternalDNS and cert-manager is wired from the IAM
+# module later (see platform-iac#22); until then no bindings are created.
+module "dns" {
+  source = "./dns"
+
+  project_id = var.project_id
+}
