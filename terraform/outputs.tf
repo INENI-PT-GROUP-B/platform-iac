@@ -58,3 +58,33 @@ output "dns_name_servers" {
   description = "Authoritative nameservers for the zone (set at the registrar)"
   value       = module.dns.name_servers
 }
+
+output "external_dns_sa_email" {
+  description = "Email of the ExternalDNS Google Service Account"
+  value       = module.iam.external_dns_sa_email
+}
+
+output "external_dns_sa_id" {
+  description = "Fully qualified ID of the ExternalDNS Google Service Account"
+  value       = module.iam.external_dns_sa_id
+}
+
+output "cert_manager_sa_email" {
+  description = "Email of the cert-manager Google Service Account"
+  value       = module.iam.cert_manager_sa_email
+}
+
+output "cert_manager_sa_id" {
+  description = "Fully qualified ID of the cert-manager Google Service Account"
+  value       = module.iam.cert_manager_sa_id
+}
+
+output "external_secrets_sa_email" {
+  description = "Email of the External Secrets Operator Google Service Account"
+  value       = module.iam.external_secrets_sa_email
+}
+
+output "crossplane_provider_gcp_sa_email" {
+  description = "Email of the Crossplane provider-gcp Google Service Account"
+  value       = module.iam.crossplane_provider_gcp_sa_email
+}
