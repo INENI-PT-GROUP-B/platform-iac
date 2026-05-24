@@ -62,12 +62,6 @@ resource "google_service_account_iam_member" "external_secrets_wi" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.external_secrets_namespace}/${var.external_secrets_ksa_name}]"
 }
 
-resource "google_project_iam_member" "external_secrets_viewer" {
-  project = var.project_id
-  role    = "roles/secretmanager.viewer"
-  member  = "serviceAccount:${google_service_account.external_secrets.email}"
-}
-
 resource "google_project_iam_member" "external_secrets_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
