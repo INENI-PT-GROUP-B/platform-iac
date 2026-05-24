@@ -30,7 +30,7 @@ The zone is defined in code in the `terraform/dns/` module and composed by the r
 
 The zone is **created fresh by Terraform** during `bootstrap.sh` — it is **not** imported. We deliberately avoid `terraform import`: importing leaves a manual, non-reproducible step in the provisioning path and breaks the one-command bootstrap promise — a clean run on an empty project must create the zone itself. The out-of-band zone (created early to unblock NS delegation) holds no records we need to preserve, so a delete-and-recreate is safe.
 
-The coordinated, destructive delete-and-recreate of the existing zone, plus the follow-up Porkbun nameserver update, is an operational step (it needs `gcloud` and registrar access during a bootstrap run), tracked separately — see [References](#references). Until that run happens, the live delegation still points at the out-of-band zone's nameservers listed below.
+The coordinated, destructive delete-and-recreate of the existing zone, plus the follow-up Porkbun nameserver update, is an operational step (it needs `gcloud` and registrar access during a bootstrap run), tracked separately in [issue #28](https://github.com/INENI-PT-GROUP-B/platform-iac/issues/28). Until that run happens, the live delegation still points at the out-of-band zone's nameservers listed below.
 
 ## Authoritative Nameservers
 
