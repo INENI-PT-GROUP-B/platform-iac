@@ -7,21 +7,9 @@ variable "project_id" {
 }
 
 variable "zone_name" {
-  description = "Name of the Cloud DNS managed zone"
+  description = "Name of the existing Cloud DNS managed zone to reference"
   type        = string
   default     = "platform-zone"
-}
-
-variable "dns_name" {
-  description = "Fully-qualified DNS name of the zone, with trailing dot"
-  type        = string
-  default     = "fhuebung.lol."
-}
-
-variable "zone_description" {
-  description = "Human-readable description attached to the managed zone"
-  type        = string
-  default     = "Public zone for the platform domain, managed by Terraform"
 }
 
 variable "dns_admin_service_accounts" {

@@ -22,8 +22,9 @@ module "cluster" {
   services_range_name = module.network.services_range_name
 }
 
-# DNS: public Cloud DNS managed zone for the platform domain, with the
-# zone-scoped roles/dns.admin binding granted to the ExternalDNS and
+# DNS: references the persistent public Cloud DNS managed zone for the platform
+# domain (created create-if-absent by bootstrap.sh, not owned by Terraform) and
+# grants the zone-scoped roles/dns.admin binding to the ExternalDNS and
 # cert-manager service accounts from the IAM module.
 module "dns" {
   source = "./dns"

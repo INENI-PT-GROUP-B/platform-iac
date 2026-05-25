@@ -1,21 +1,18 @@
 # main.tf
-# Public Cloud DNS managed zone for the platform domain, plus a zone-scoped
-# roles/dns.admin binding for the workloads that manage records.
-# The provider configuration is inherited from the root module.
+# Reference to the persistent public Cloud DNS managed zone for the platform
+# domain, plus a zone-scoped roles/dns.admin binding for the workloads that
+# manage records. The provider configuration is inherited from the root module.
 
-# Public managed zone for the platform domain. ExternalDNS writes A/CNAME
-# records for tenant ingresses here; cert-manager solves ACME DNS-01 challenges
-# by writing TXT records. DNSSEC is off, matching the registrar (Porkbun).
-resource "google_dns_managed_zone" "platform" {
-  project     = var.project_id
-  name        = var.zone_name
-  dns_name    = var.dns_name
-  description = var.zone_description
-  visibility  = "public"
-
-  dnssec_config {
-    state = "off"
-  }
+# The managed zone is persistent infrastructure: created and delegated once and
+# never destroyed on teardown, in the same class as the Terraform state bucket
+# and Google Secret Manager. bootstrap.sh creates it create-if-absent before
+# `terraform apply`, so Terraform references it via a data source rather than
+# owning its lifecycle. This keeps the registrar (Porkbun) nameservers stable
+# and out of the bootstrap path — no NS update ever runs during a bootstrap.
+# See architecture-decisions.md (DNS/TLS) and INENI-PT-GROUP-B/platform#51.
+data "google_dns_managed_zone" "platform" {
+  project = var.project_id
+  name    = var.zone_name
 }
 
 # Grant roles/dns.admin on the zone to the in-cluster workloads that manage
@@ -26,7 +23,7 @@ resource "google_dns_managed_zone_iam_member" "dns_admin" {
   for_each = toset(var.dns_admin_service_accounts)
 
   project      = var.project_id
-  managed_zone = google_dns_managed_zone.platform.name
+  managed_zone = data.google_dns_managed_zone.platform.name
   role         = "roles/dns.admin"
   member       = "serviceAccount:${each.value}"
 }
