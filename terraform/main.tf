@@ -47,3 +47,15 @@ module "iam" {
 
   depends_on = [module.cluster]
 }
+
+# Backup: shared GCS bucket for CloudNativePG per-tenant database backups.
+# Bucket-scoped IAM management is granted to the Crossplane provider-gcp SA so
+# it can add per-tenant, prefix-scoped write bindings at onboarding (S3-04).
+module "backup" {
+  source = "./backup"
+
+  project_id = var.project_id
+  region     = var.region
+
+  crossplane_provider_gcp_sa_email = module.iam.crossplane_provider_gcp_sa_email
+}

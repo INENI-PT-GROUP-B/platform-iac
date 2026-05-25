@@ -6,7 +6,7 @@
 #
 # Out of scope for S1-08:
 #   - DNS zone bindings for ExternalDNS / cert-manager  -> S1-09
-#   - GCS backup bucket IAM                             -> S1-08a
+#   - GCS backup bucket + IAM                           -> ./backup module (S1-08a)
 #   - Crossplane ProviderConfig manifests               -> S2-10
 #   - API enablement (iam, iamcredentials, secretmanager)
 #                                                       -> bootstrap.sh / S1-10
