@@ -28,10 +28,24 @@ resource "google_storage_bucket" "pg_backups" {
   }
 }
 
-# Bucket-scoped storage.admin for Crossplane provider-gcp: lets the per-tenant
-# Composition add prefix-scoped write bindings for each tenant's ServiceAccount.
-resource "google_storage_bucket_iam_member" "provider_gcp_admin" {
+# Least-privilege IAM for Crossplane provider-gcp: its only job on this bucket is
+# to manage the IAM policy so the per-tenant Composition (S3-04) can add
+# prefix-scoped write bindings for each tenant's ServiceAccount. A custom role
+# with just the two IAM-policy permissions is tighter than roles/storage.admin,
+# which would also let it delete the bucket and read/write every tenant's objects.
+resource "google_project_iam_custom_role" "pg_backups_iam_admin" {
+  project     = var.project_id
+  role_id     = "pgBackupsBucketIamAdmin"
+  title       = "PG Backups Bucket IAM Admin"
+  description = "Manage the IAM policy of the pg-backups bucket so the Crossplane Composition can add per-tenant prefix-scoped write bindings. No object or bucket-lifecycle access."
+  permissions = [
+    "storage.buckets.getIamPolicy",
+    "storage.buckets.setIamPolicy",
+  ]
+}
+
+resource "google_storage_bucket_iam_member" "provider_gcp_iam_admin" {
   bucket = google_storage_bucket.pg_backups.name
-  role   = "roles/storage.admin"
+  role   = google_project_iam_custom_role.pg_backups_iam_admin.id
   member = "serviceAccount:${var.crossplane_provider_gcp_sa_email}"
 }

@@ -14,6 +14,6 @@ variable "region" {
 }
 
 variable "crossplane_provider_gcp_sa_email" {
-  description = "Email of the Crossplane provider-gcp Google Service Account, granted bucket-scoped storage.admin so the per-tenant Composition can add prefix-scoped write bindings"
+  description = "Email of the Crossplane provider-gcp Google Service Account, granted a bucket-scoped least-privilege custom role (IAM get/setIamPolicy only) so the per-tenant Composition can add prefix-scoped write bindings"
   type        = string
 }
