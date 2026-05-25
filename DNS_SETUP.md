@@ -13,7 +13,8 @@ This document describes the DNS configuration for the platform domain `fhuebung.
 | Managed Zone | `platform-zone` |
 | Visibility | Public |
 | DNSSEC | Off (zone and registrar) |
-| Management | Terraform — `terraform/dns/` module, wired into the root module |
+| Zone lifecycle | Persistent — created create-if-absent by `bootstrap.sh`, never destroyed on teardown |
+| Terraform role | References the zone (data source) and manages the zone-scoped `roles/dns.admin` bindings in `terraform/dns/` |
 
 ## Provider Decision
 
@@ -26,17 +27,42 @@ We chose **Google Cloud DNS** over Cloudflare for the following reasons:
 
 ## Terraform Management
 
-The zone is defined in code in the `terraform/dns/` module and composed by the root module as `module "dns"`. The root module also feeds the module the ExternalDNS and cert-manager service-account emails from the `iam` module, so the module creates a zone-scoped `roles/dns.admin` binding for each (Workload Identity, no static credentials).
+The zone is treated as **persistent infrastructure** — created and delegated once and **not** destroyed on teardown, in the same class as the Terraform state bucket and Google Secret Manager. `bootstrap.sh` creates it create-if-absent (via `gcloud`, like the state bucket) before `terraform apply`; an existing zone is reused as-is. The existing out-of-band `platform-zone` (created early to unblock NS delegation) is adopted as this persistent zone, so the nameservers already delegated at Porkbun stay valid and **no registrar step ever runs during a bootstrap**.
 
-The zone is **created fresh by Terraform** during `bootstrap.sh` — it is **not** imported. We deliberately avoid `terraform import`: importing leaves a manual, non-reproducible step in the provisioning path and breaks the one-command bootstrap promise — a clean run on an empty project must create the zone itself. The out-of-band zone (created early to unblock NS delegation) holds no records we need to preserve, so a delete-and-recreate is safe.
+Because the zone is created outside Terraform, the `terraform/dns/` module references it via a `data "google_dns_managed_zone"` source rather than owning a `google_dns_managed_zone` resource. The module is composed by the root module as `module "dns"`, which feeds it the ExternalDNS and cert-manager service-account emails from the `iam` module so it can create a zone-scoped `roles/dns.admin` binding for each (Workload Identity, no static credentials). On teardown the IAM bindings are removed with the rest of the state; the zone itself survives and the bindings are recreated on the next apply.
 
-The coordinated, destructive delete-and-recreate of the existing zone, plus the follow-up Porkbun nameserver update, is an operational step (it needs `gcloud` and registrar access during a bootstrap run), tracked separately in [issue #28](https://github.com/INENI-PT-GROUP-B/platform-iac/issues/28). Until that run happens, the live delegation still points at the out-of-band zone's nameservers listed below.
+This supersedes the earlier "recreate, not import" approach (task list S1-09). The decision is recorded in `platform/docs/claude/architecture-decisions.md` (DNS/TLS) and [platform#51](https://github.com/INENI-PT-GROUP-B/platform/issues/51); the previously planned destructive recreate plus Porkbun NS update ([platform-iac#28](https://github.com/INENI-PT-GROUP-B/platform-iac/issues/28)) is obsolete under this model. `terraform import` stays rejected, as it leaves a manual, non-reproducible step in the provisioning path.
+
+### Zone creation parameters (for `bootstrap.sh` on an empty project)
+
+On the current project `platform-zone` already exists, so the create-if-absent step is a no-op. On a fully empty project, `bootstrap.sh` must create the zone with these parameters **before** `terraform apply` (Terraform only references the zone, it does not create it):
+
+| Parameter | Value |
+|---|---|
+| Name | `platform-zone` |
+| DNS name | `fhuebung.lol.` |
+| Visibility | Public |
+| DNSSEC | Off |
+| Description | `Public zone for the platform domain` |
+
+Equivalent `gcloud` invocation:
+
+```bash
+gcloud dns managed-zones create platform-zone \
+  --project=dotted-axle-495612-f4 \
+  --dns-name=fhuebung.lol. \
+  --visibility=public \
+  --dnssec-state=off \
+  --description="Public zone for the platform domain"
+```
+
+After creation, read the assigned nameservers and delegate them at Porkbun once (see below). On the established project this has already been done.
 
 ## Authoritative Nameservers
 
-Google assigns four authoritative nameservers when the managed zone is created. They are delegated at Porkbun under **Authoritative Nameservers** for `fhuebung.lol`.
+Google assigned four authoritative nameservers when the managed zone was created. They are delegated at Porkbun under **Authoritative Nameservers** for `fhuebung.lol`.
 
-The nameservers of the current out-of-band zone:
+The persistent zone's nameservers:
 
 ```
 ns-cloud-e1.googledomains.com
@@ -45,7 +71,7 @@ ns-cloud-e3.googledomains.com
 ns-cloud-e4.googledomains.com
 ```
 
-> **Note:** The Terraform recreate provisions a fresh zone, for which Google may assign a **different** nameserver set. After the recreate, read the new servers (see [gcloud / Terraform commands](#gcloud--terraform-commands)) and update them at Porkbun if they differ. DNSSEC stays off at the registrar.
+> **Note:** Because the zone is persistent and never recreated, these nameservers are stable — a bootstrap run reuses the existing zone and does not change them, so no Porkbun update is needed. They would only change if the zone were deleted and created anew, which the persistent-zone model deliberately avoids. DNSSEC stays off at the registrar.
 
 NS-record TTL is `21600s` (6h) — full global propagation can take up to 24h, but typically completes within 15 minutes to a few hours.
 
@@ -97,7 +123,7 @@ gcloud dns record-sets list --zone=platform-zone \
 
 ## Migration Notes
 
-A previous zone existed in the legacy project `ineni-pt-group-b`. After the project switch to `dotted-axle-495612-f4`, a new zone was created out-of-band and the NS records at Porkbun were updated to the new `ns-cloud-eX` servers. That out-of-band zone is the one the Terraform recreate replaces (see [Terraform Management](#terraform-management)).
+A previous zone existed in the legacy project `ineni-pt-group-b`. After the project switch to `dotted-axle-495612-f4`, a new zone was created out-of-band and the NS records at Porkbun were updated to the new `ns-cloud-eX` servers. That out-of-band zone is now adopted as the persistent zone (see [Terraform Management](#terraform-management)) rather than recreated, so its nameservers remain authoritative.
 
 ## Downstream Consumers
 
