@@ -24,7 +24,7 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 
   Make sure both authenticate as the **same** principal — Terraform uses ADC, not the CLI account, so a mismatch can cause permission errors that the `gcloud auth list` account would not predict.
 
-- Sufficient project IAM on the operator's account. Beyond the usual resource-creation roles, the `dns/` module sets a zone-scoped IAM policy on `platform-zone`, which requires the `dns.managedZones.getIamPolicy` and `dns.managedZones.setIamPolicy` permissions. These are **not** included in `roles/dns.admin` (nor in `roles/editor`), so the apply fails with a `403 forbidden` on `google_dns_managed_zone_iam_member` unless the operator has them. Grant them via a least-privilege custom role (create it once, then bind it to each operator):
+- Sufficient project IAM on the operator's account. Beyond the usual resource-creation roles, the `dns/` module sets a zone-scoped IAM policy on `platform-zone`, which requires the `dns.managedZones.setIamPolicy` permission. This is **not** included in `roles/dns.admin` (nor in `roles/editor`), so the apply fails with a `403 forbidden` on `google_dns_managed_zone_iam_member` unless the operator has it. Grant it via a least-privilege custom role (create it once, then bind it to each operator). The role also includes `getIamPolicy` — `roles/dns.admin` already covers it, but bundling both keeps the custom role self-contained for operators who only hold `roles/editor`:
 
   ```bash
   # Create the custom role once for the project.
