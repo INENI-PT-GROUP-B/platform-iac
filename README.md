@@ -48,10 +48,12 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 
    ```bash
    cp bootstrap/bootstrap.env.example bootstrap/bootstrap.env
-   # edit bootstrap/bootstrap.env (GCP_PROJECT_ID, GCP_REGION, TFSTATE_BUCKET_LOCATION)
+   # edit bootstrap/bootstrap.env (GCP_PROJECT_ID, GCP_REGION, GCP_ZONE, TFSTATE_BUCKET_LOCATION)
    ```
 
    `bootstrap/bootstrap.env` is gitignored and must never be committed.
+
+   This file is the single source of truth for the bootstrap run: `bootstrap.sh` exports `GCP_PROJECT_ID`, `GCP_REGION`, and `GCP_ZONE` as `TF_VAR_*` so Terraform reads the same values. There is no `terraform.tfvars` to maintain in parallel.
 
 2. Run the script:
 
@@ -61,7 +63,7 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 
 The script runs the following phases in order:
 
-- **Phase 0 — preflight:** checks the required CLIs, an active `gcloud` account, present Application Default Credentials, and sets the active project.
+- **Phase 0 — preflight:** checks the required CLIs, an active `gcloud` account, present Application Default Credentials, asserts that the state-bucket name in `terraform/backend.tf` matches `${GCP_PROJECT_ID}-tfstate`, and sets the active project.
 - **Phase 1 — enable APIs:** idempotently enables the GCP APIs the platform needs (Compute, GKE, Cloud DNS, IAM, Resource Manager, Secret Manager, Storage, Service Usage).
 - **Phase 2 — state bucket, DNS zone, init:** creates `gs://<project>-tfstate` (uniform bucket-level access, object versioning) and the persistent `platform-zone` Cloud DNS zone if they do not yet exist, then runs `terraform init`.
 - **Phase 3 — apply:** runs `terraform apply` to provision the network, GKE cluster, IAM service accounts and Workload Identity bindings, DNS IAM bindings, and the backup bucket.

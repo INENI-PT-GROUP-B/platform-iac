@@ -82,7 +82,14 @@ source "${ENV_FILE}"
 
 : "${GCP_PROJECT_ID:?GCP_PROJECT_ID must be set in bootstrap.env}"
 : "${GCP_REGION:?GCP_REGION must be set in bootstrap.env}"
+: "${GCP_ZONE:?GCP_ZONE must be set in bootstrap.env}"
 : "${TFSTATE_BUCKET_LOCATION:?TFSTATE_BUCKET_LOCATION must be set in bootstrap.env}"
+
+# Single source of truth: feed bootstrap.env values into Terraform as TF_VAR_*.
+# Avoids drift between bootstrap.env and a separate terraform.tfvars.
+export TF_VAR_project_id="${GCP_PROJECT_ID}"
+export TF_VAR_region="${GCP_REGION}"
+export TF_VAR_zone="${GCP_ZONE}"
 
 # --- Phase 0: preflight -------------------------------------------------------
 PHASE="phase 0"
@@ -105,6 +112,17 @@ fi
 # which are separate from the gcloud CLI account above.
 if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
   err "no Application Default Credentials; run 'gcloud auth application-default login' first"
+  exit 1
+fi
+
+# backend.tf cannot use variables, so the state-bucket name is hardcoded there.
+# Fail fast if bootstrap.env points at a different project than that bucket.
+BACKEND_BUCKET="$(awk -F'"' '/^[[:space:]]*bucket[[:space:]]*=/ {print $2; exit}' \
+  "${TF_DIR}/backend.tf")"
+EXPECTED_BUCKET="${GCP_PROJECT_ID}-tfstate"
+if [[ "${BACKEND_BUCKET}" != "${EXPECTED_BUCKET}" ]]; then
+  err "backend.tf bucket (${BACKEND_BUCKET}) does not match GCP_PROJECT_ID (${EXPECTED_BUCKET})"
+  err "either correct GCP_PROJECT_ID in bootstrap.env or update terraform/backend.tf"
   exit 1
 fi
 
