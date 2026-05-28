@@ -30,7 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="${SCRIPT_DIR}/../terraform"
 
 # Tee all output to bootstrap.log (gitignored) while keeping the console live.
-exec > >(tee -a "${SCRIPT_DIR}/bootstrap.log") 2>&1
+# Truncates on each run so the log scopes to the current invocation only.
+exec > >(tee "${SCRIPT_DIR}/bootstrap.log") 2>&1
 
 log() {
   printf '[%s] %s\n' "${PHASE:-bootstrap}" "$*"
@@ -108,8 +109,10 @@ for cli in gcloud terraform kubectl helm; do
   fi
 done
 
-if ! gcloud auth list --filter=status:ACTIVE --format='value(account)' \
-  | grep -q .; then
+# Avoid `... | grep -q .` here: under `pipefail`, grep's early exit can
+# SIGPIPE gcloud (exit 141) and the pipeline would report failure even when
+# an active account exists.
+if [[ -z "$(gcloud auth list --filter=status:ACTIVE --format='value(account)')" ]]; then
   err "no active gcloud account; run 'gcloud auth login' first"
   exit 1
 fi
@@ -187,7 +190,10 @@ else
 fi
 
 log "running terraform init"
-terraform -chdir="${TF_DIR}" init -input=false
+# -lockfile=readonly: fail loudly on .terraform.lock.hcl drift instead of
+# silently rewriting it on the operator's machine. Aligns with the pinning
+# philosophy in platform/CONTRIBUTING.md § Tool Versions in CI.
+terraform -chdir="${TF_DIR}" init -input=false -lockfile=readonly
 
 # --- Phase 3: terraform apply -------------------------------------------------
 PHASE="phase 3"
