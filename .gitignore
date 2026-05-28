@@ -36,3 +36,6 @@ terraform.rc
 
 # Bootstrap local config (never committed)
 bootstrap/bootstrap.env
+
+# Bootstrap run log
+bootstrap/bootstrap.log

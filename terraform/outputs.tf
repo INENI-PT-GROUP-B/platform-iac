@@ -32,6 +32,11 @@ output "cluster_name" {
   value       = module.cluster.cluster_name
 }
 
+output "cluster_zone" {
+  description = "Zone of the zonal GKE cluster"
+  value       = module.cluster.cluster_zone
+}
+
 output "cluster_endpoint" {
   description = "IP endpoint of the GKE cluster control plane"
   value       = module.cluster.cluster_endpoint

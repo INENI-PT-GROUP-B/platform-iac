@@ -6,6 +6,11 @@ output "cluster_name" {
   value       = google_container_cluster.this.name
 }
 
+output "cluster_zone" {
+  description = "Zone of the zonal GKE cluster (for get-credentials)"
+  value       = google_container_cluster.this.location
+}
+
 output "cluster_endpoint" {
   description = "IP endpoint of the GKE cluster control plane"
   value       = google_container_cluster.this.endpoint
