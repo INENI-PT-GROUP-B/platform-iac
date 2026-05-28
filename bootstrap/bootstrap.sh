@@ -41,19 +41,25 @@ err() {
 }
 
 # Required GCP APIs, derived from the resources the Terraform code provisions:
-#   compute    — VPC, subnet, firewall, GKE nodes
-#   container  — GKE cluster and node pool
-#   dns        — Cloud DNS managed zone and records
-#   iam        — service accounts and Workload Identity bindings
+#   compute        — VPC, subnet, firewall, GKE nodes
+#   container      — GKE cluster and node pool
+#   dns            — Cloud DNS managed zone and records
+#   iam            — service accounts and Workload Identity bindings
+#   iamcredentials — KSA→GSA token minting at runtime (generateAccessToken,
+#                    signJwt) used by Workload Identity for ExternalDNS,
+#                    cert-manager, ESO, and Crossplane provider-gcp; without
+#                    it the cluster provisions cleanly but in-cluster
+#                    impersonation fails at runtime
 #   cloudresourcemanager — project-level IAM bindings
-#   secretmanager — ESO/Crossplane secret access (bindings created in IAM module)
-#   storage    — state bucket and the CloudNativePG backup bucket
-#   serviceusage — the `services enable` call itself
+#   secretmanager  — ESO/Crossplane secret access (bindings created in IAM module)
+#   storage        — state bucket and the CloudNativePG backup bucket
+#   serviceusage   — the `services enable` call itself
 REQUIRED_APIS=(
   compute.googleapis.com
   container.googleapis.com
   dns.googleapis.com
   iam.googleapis.com
+  iamcredentials.googleapis.com
   cloudresourcemanager.googleapis.com
   secretmanager.googleapis.com
   storage.googleapis.com

@@ -64,7 +64,7 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 The script runs the following phases in order:
 
 - **Phase 0 — preflight:** checks the required CLIs, an active `gcloud` account, present Application Default Credentials, asserts that the state-bucket name in `terraform/backend.tf` matches `${GCP_PROJECT_ID}-tfstate`, and sets the active project.
-- **Phase 1 — enable APIs:** idempotently enables the GCP APIs the platform needs (Compute, GKE, Cloud DNS, IAM, Resource Manager, Secret Manager, Storage, Service Usage).
+- **Phase 1 — enable APIs:** idempotently enables the GCP APIs the platform needs (Compute, GKE, Cloud DNS, IAM, IAM Credentials, Resource Manager, Secret Manager, Storage, Service Usage). IAM Credentials is required for the Workload Identity token-minting calls that ExternalDNS, cert-manager, ESO, and Crossplane provider-gcp perform at runtime.
 - **Phase 2 — state bucket, DNS zone, init:** creates `gs://<project>-tfstate` (uniform bucket-level access, object versioning) and the persistent `platform-zone` Cloud DNS zone if they do not yet exist, then runs `terraform init`.
 - **Phase 3 — apply:** runs `terraform apply` to provision the network, GKE cluster, IAM service accounts and Workload Identity bindings, DNS IAM bindings, and the backup bucket.
 - **Phase 4 — kubeconfig:** fetches cluster credentials via `gcloud container clusters get-credentials`, so `kubectl` is ready against the new cluster.
