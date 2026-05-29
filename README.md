@@ -68,6 +68,7 @@ The script runs the following phases in order:
 - **Phase 2 — state bucket, DNS zone, init:** creates `gs://<project>-tfstate` (uniform bucket-level access, object versioning) and the persistent `platform-zone` Cloud DNS zone if they do not yet exist, then runs `terraform init`.
 - **Phase 3 — apply:** runs `terraform apply` to provision the network, GKE cluster, IAM service accounts and Workload Identity bindings, DNS IAM bindings, and the backup bucket.
 - **Phase 4 — kubeconfig:** fetches cluster credentials via `gcloud container clusters get-credentials`, so `kubectl` is ready against the new cluster.
+- **Phase 5 — Argo CD:** installs Argo CD into the `argocd` namespace with the pinned `argo/argo-cd` Helm chart (values in [`bootstrap/argocd-values.yaml`](bootstrap/argocd-values.yaml)), waits for the server to roll out, then applies the root App-of-Apps ([`bootstrap/argocd-bootstrap.yaml`](bootstrap/argocd-bootstrap.yaml)). From here Argo CD reconciles every other platform component from `platform-gitops`.
 
 The full run is logged to `bootstrap/bootstrap.log` (gitignored).
 
@@ -76,7 +77,20 @@ Two deliberate properties of this setup:
 - The state bucket and the `platform-zone` DNS zone are **intentionally not managed by Terraform**. The state bucket would otherwise need state before any state exists (the bootstrap paradox); the DNS zone is persistent infrastructure (created once, delegated at the registrar once, never destroyed on teardown) and is only referenced by the `dns/` module via a data source. Both are created create-if-absent by the script before `terraform init`. See [`DNS_SETUP.md`](DNS_SETUP.md) for the zone lifecycle.
 - The script is **idempotent and safe to re-run**: bucket and zone creation are skipped when they already exist, `gcloud services enable` is a no-op for already-enabled APIs, and `terraform apply` reconciles to the desired state.
 
-The Argo CD bootstrap (Helm install + root App-of-Apps pointing at `platform-gitops`) is added to the script in a later task (S2-01). After that, Argo CD reconciles everything else from `platform-gitops`.
+### Argo CD access after bootstrap
+
+Phase 5 installs Argo CD and applies a single root App-of-Apps named `root` that points at `platform-gitops/applications/`. That directory also contains a copy of the same `root` Application (S2-02), so Argo CD adopts and self-manages the root on its first sync — there is never a second, competing root.
+
+Argo CD's Ingress (`argocd.fhuebung.lol`, TLS via the wildcard secret `wildcard-fhuebung-lol`) is created at bootstrap time but stays dormant until Traefik, cert-manager, and the wildcard certificate exist. Until then, reach the UI via port-forward:
+
+```bash
+kubectl -n argocd port-forward svc/argocd-server 8080:80
+# initial admin password:
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+Storing the admin password in Google Secret Manager (instead of reading the chart-generated secret) is tracked as a follow-up, not part of this bootstrap.
 
 ## Modules
 

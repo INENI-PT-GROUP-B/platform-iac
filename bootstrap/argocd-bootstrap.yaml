@@ -1,0 +1,44 @@
+---
+# Root App-of-Apps, applied imperatively by bootstrap/bootstrap.sh (Phase 5)
+# immediately after Argo CD is installed.
+#
+# This is the ONLY Argo CD object applied from disk. It points at
+# platform-gitops/applications/, which contains one child Application per
+# platform component AND a copy of THIS manifest at applications/root.yaml
+# (S2-02). Because that copy is also named `root` with an identical spec, Argo CD
+# adopts and self-manages this root on the first sync: from then on the root is
+# reconciled from git like every other component. There is never a second,
+# competing root Application.
+#
+# CONTRACT WITH S2-02 (platform-gitops/applications/root.yaml, am): the spec
+# below MUST stay byte-for-byte equivalent to applications/root.yaml. Any
+# divergence leaves the root Application permanently OutOfSync (self-heal would
+# fight the local apply on every bootstrap re-run).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/INENI-PT-GROUP-B/platform-gitops.git
+    targetRevision: main
+    path: applications
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
