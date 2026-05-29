@@ -9,7 +9,7 @@
 # tuning is repeated.
 #
 # TLS is terminated in Traefik with the wildcard cert *.fhuebung.lol (secret
-# wildcard-fhuebung-lol, issued by cert-manager). Argo CD therefore runs in
+# wildcard-fhuebung-lol-tls, issued by cert-manager). Argo CD therefore runs in
 # insecure (plain-HTTP) mode so it does not double-terminate TLS. At bootstrap
 # time Traefik, cert-manager and the wildcard cert do NOT yet exist, so the
 # Ingress below is created but dormant; reach the UI via port-forward until the
@@ -30,4 +30,4 @@ server:
     extraTls:
       - hosts:
           - argocd.fhuebung.lol
-        secretName: wildcard-fhuebung-lol
+        secretName: wildcard-fhuebung-lol-tls
