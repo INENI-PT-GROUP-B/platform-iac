@@ -13,6 +13,9 @@
 #                         zone if absent, then `terraform init`
 #   3  terraform apply  — provision network, cluster, IAM, DNS bindings, backup
 #   4  kubeconfig       — fetch cluster credentials for kubectl
+#   5  argo cd          — install Argo CD (Helm) + apply the root App-of-Apps,
+#                         after which Argo CD self-manages every platform
+#                         component from platform-gitops
 #
 # Idempotent throughout: a second run converges with no manual cleanup. Every
 # mutating step is guarded by a describe-then-create check or is natively
@@ -21,8 +24,9 @@
 # Terraform runs locally as the executing team member (ADC). There are no
 # long-lived service-account JSON keys anywhere in this path.
 #
-# The Argo CD bootstrap (Helm install + root App-of-Apps) is added in a later
-# task (S2-01); it is intentionally not part of this script yet.
+# Phase 5 installs Argo CD via Helm and applies the root App-of-Apps; from that
+# point Argo CD reconciles every other platform component from platform-gitops,
+# so Argo CD itself is the only thing this script installs imperatively.
 
 set -euo pipefail
 
@@ -73,6 +77,16 @@ REQUIRED_APIS=(
 DNS_ZONE_NAME="platform-zone"
 DNS_ZONE_DNS_NAME="fhuebung.lol."
 DNS_ZONE_DESCRIPTION="Public zone for the platform domain"
+
+# Argo CD install parameters (Phase 5). The chart version is pinned (no floating
+# version) per CONTRIBUTING § Tool Versions in CI; bump it deliberately.
+ARGOCD_NAMESPACE="argocd"
+ARGOCD_HELM_REPO_NAME="argo"
+ARGOCD_HELM_REPO_URL="https://argoproj.github.io/argo-helm"
+ARGOCD_CHART="argo/argo-cd"
+ARGOCD_CHART_VERSION="9.5.16"
+ARGOCD_VALUES_FILE="${SCRIPT_DIR}/argocd-values.yaml"
+ARGOCD_ROOT_APP_FILE="${SCRIPT_DIR}/argocd-bootstrap.yaml"
 
 # --- Configuration -----------------------------------------------------------
 # Load operator-provided values from bootstrap.env (gitignored). The committed
@@ -210,6 +224,28 @@ gcloud container clusters get-credentials "${CLUSTER_NAME}" \
   --zone="${CLUSTER_ZONE}" \
   --project="${GCP_PROJECT_ID}"
 
+# --- Phase 5: Argo CD bootstrap -----------------------------------------------
+PHASE="phase 5"
+log "adding/updating the Argo CD Helm repo (idempotent)"
+helm repo add "${ARGOCD_HELM_REPO_NAME}" "${ARGOCD_HELM_REPO_URL}" --force-update >/dev/null
+helm repo update "${ARGOCD_HELM_REPO_NAME}" >/dev/null
+
+log "installing/upgrading Argo CD (chart ${ARGOCD_CHART} ${ARGOCD_CHART_VERSION})"
+helm upgrade --install argocd "${ARGOCD_CHART}" \
+  --version "${ARGOCD_CHART_VERSION}" \
+  --namespace "${ARGOCD_NAMESPACE}" \
+  --create-namespace \
+  --values "${ARGOCD_VALUES_FILE}" \
+  --wait --timeout 10m
+
+log "applying the root App-of-Apps (Argo CD now self-manages from platform-gitops)"
+# Server-side apply: the root is also reconciled from applications/root.yaml
+# (S2-02) via server-side apply, so applying it server-side here lets Argo CD
+# take over field ownership cleanly on first sync — no client-side
+# last-applied-configuration annotation and no field-manager conflict.
+kubectl apply --server-side --field-manager=bootstrap.sh -f "${ARGOCD_ROOT_APP_FILE}"
+
 PHASE="bootstrap"
 log "platform bootstrap complete; kubectl is configured for ${CLUSTER_NAME}"
-log "Argo CD bootstrap (App-of-Apps) is added in a later task (S2-01)"
+log "Argo CD installed and root App-of-Apps applied; it self-manages from platform-gitops"
+log "UI (until Traefik + wildcard cert exist): kubectl -n argocd port-forward svc/argocd-server 8080:80"
