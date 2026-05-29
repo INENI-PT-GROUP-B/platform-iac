@@ -238,11 +238,12 @@ helm upgrade --install argocd "${ARGOCD_CHART}" \
   --values "${ARGOCD_VALUES_FILE}" \
   --wait --timeout 10m
 
-log "waiting for the Argo CD server to become available"
-kubectl -n "${ARGOCD_NAMESPACE}" rollout status deploy/argocd-server --timeout=300s
-
 log "applying the root App-of-Apps (Argo CD now self-manages from platform-gitops)"
-kubectl apply -f "${ARGOCD_ROOT_APP_FILE}"
+# Server-side apply: the root is also reconciled from applications/root.yaml
+# (S2-02) via server-side apply, so applying it server-side here lets Argo CD
+# take over field ownership cleanly on first sync — no client-side
+# last-applied-configuration annotation and no field-manager conflict.
+kubectl apply --server-side --field-manager=bootstrap.sh -f "${ARGOCD_ROOT_APP_FILE}"
 
 PHASE="bootstrap"
 log "platform bootstrap complete; kubectl is configured for ${CLUSTER_NAME}"
