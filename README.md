@@ -81,7 +81,7 @@ Two deliberate properties of this setup:
 
 Phase 5 installs Argo CD and applies a single root App-of-Apps named `root` that points at `platform-gitops/applications/`. That directory also contains a copy of the same `root` Application (S2-02), so Argo CD adopts and self-manages the root on its first sync — there is never a second, competing root.
 
-Argo CD's Ingress (`argocd.fhuebung.lol`, TLS via the wildcard secret `wildcard-fhuebung-lol`) is created at bootstrap time but stays dormant until Traefik, cert-manager, and the wildcard certificate exist. Until then, reach the UI via port-forward:
+Argo CD's Ingress (`argocd.fhuebung.lol`, TLS via the wildcard secret `wildcard-fhuebung-lol-tls`) is created at bootstrap time but stays dormant until Traefik, cert-manager, and the wildcard certificate exist. Until then, reach the UI via port-forward:
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:80
