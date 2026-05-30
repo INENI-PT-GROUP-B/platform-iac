@@ -87,6 +87,8 @@ Two deliberate properties of this setup:
 - The state bucket and the `platform-zone` DNS zone are **intentionally not managed by Terraform**. The state bucket would otherwise need state before any state exists (the bootstrap paradox); the DNS zone is persistent infrastructure (created once, delegated at the registrar once, never destroyed on teardown) and is only referenced by the `dns/` module via a data source. Both are created create-if-absent by the script before `terraform init`. See [`DNS_SETUP.md`](DNS_SETUP.md) for the zone lifecycle.
 - The script is **idempotent and safe to re-run**: bucket and zone creation are skipped when they already exist, `gcloud services enable` is a no-op for already-enabled APIs, and `terraform apply` reconciles to the desired state.
 
+For tearing the platform down and bringing it back up end-to-end (useful for validating that the bootstrap converges from a cold start without manual intervention), see [`TEARDOWN.md`](TEARDOWN.md).
+
 ### Argo CD access after bootstrap
 
 Phase 5 installs Argo CD and applies a single root App-of-Apps named `root` that points at `platform-gitops/applications/`. That directory also contains a copy of the same `root` Application (S2-02), so Argo CD adopts and self-manages the root on its first sync — there is never a second, competing root.
