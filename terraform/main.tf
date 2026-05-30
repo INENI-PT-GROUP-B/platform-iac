@@ -23,9 +23,11 @@ module "cluster" {
 }
 
 # DNS: references the persistent public Cloud DNS managed zone for the platform
-# domain (created create-if-absent by bootstrap.sh, not owned by Terraform) and
+# domain (created create-if-absent by bootstrap.sh, not owned by Terraform),
 # grants the zone-scoped roles/dns.admin binding to the ExternalDNS and
-# cert-manager service accounts from the IAM module.
+# cert-manager service accounts from the IAM module, and grants the project-
+# level roles/dns.reader to ExternalDNS (needed for ManagedZones.List at
+# startup; cert-manager does not need this).
 module "dns" {
   source = "./dns"
 
@@ -34,6 +36,10 @@ module "dns" {
   dns_admin_service_accounts = [
     module.iam.external_dns_sa_email,
     module.iam.cert_manager_sa_email,
+  ]
+
+  dns_zones_reader_service_accounts = [
+    module.iam.external_dns_sa_email,
   ]
 }
 
