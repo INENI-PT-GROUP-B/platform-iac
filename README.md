@@ -42,6 +42,16 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 
   (`roles/owner` also grants these permissions and would work, but the custom role keeps the operator grant least-privilege.)
 
+- `roles/container.admin` on the project for the operator. Phase 5 installs Argo CD via Helm, whose `pre-install` hook (`argocd-redis-secret-init`) carries `hook-delete-policy: before-hook-creation`. Helm therefore issues a `delete` against the hook's `Role`/`RoleBinding` even on first install. GKE rejects this via Cloud IAM with `container.roles.delete` missing whenever the operator holds only `roles/editor`-equivalent permissions, and Phase 5 aborts with the release stuck in `pending-install`. `roles/container.admin` is the smallest standard role that covers the GKE RBAC delete verbs the chart's hooks need:
+
+  ```bash
+  gcloud projects add-iam-policy-binding dotted-axle-495612-f4 \
+    --member="user:<operator-email>" \
+    --role="roles/container.admin"
+  ```
+
+  Like the DNS Zone IAM Admin grant above, this is an operator-account prerequisite, not Terraform-managed — Terraform cannot grant the permissions it needs in order to run.
+
 ### Run
 
 1. Create your local bootstrap config from the committed example and adjust the values:
