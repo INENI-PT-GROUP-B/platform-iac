@@ -21,3 +21,15 @@ variable "dns_admin_service_accounts" {
   type        = list(string)
   default     = []
 }
+
+variable "dns_zones_reader_service_accounts" {
+  description = <<-EOT
+    Service-account emails granted roles/dns.reader project-wide. ExternalDNS
+    calls ManagedZones.List against the project at startup; the zone-scoped
+    roles/dns.admin binding does not include that permission, so the call
+    returns 403 and no records are ever written. cert-manager does not need
+    this — it only edits a known zone via DNS-01.
+  EOT
+  type        = list(string)
+  default     = []
+}

@@ -19,7 +19,7 @@ resource "google_service_account" "external_dns" {
   project      = var.project_id
   account_id   = var.external_dns_sa_id
   display_name = "ExternalDNS (Workload Identity)"
-  description  = "Used by ExternalDNS to manage Cloud DNS record sets. Zone-scoped roles/dns.admin binding lives in the dns module (S1-09)."
+  description  = "Used by ExternalDNS to manage Cloud DNS record sets. DNS bindings (zone-scoped roles/dns.admin, project-level roles/dns.reader for zone listing) live in the dns module (S1-09)."
 }
 
 resource "google_service_account_iam_member" "external_dns_wi" {

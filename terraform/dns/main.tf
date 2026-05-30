@@ -27,3 +27,16 @@ resource "google_dns_managed_zone_iam_member" "dns_admin" {
   role         = "roles/dns.admin"
   member       = "serviceAccount:${each.value}"
 }
+
+# Grant roles/dns.reader project-wide to workloads that need to enumerate
+# managed zones (ExternalDNS). The zone-scoped roles/dns.admin above covers
+# read/write within platform-zone but not ManagedZones.List on the project,
+# which ExternalDNS calls at startup regardless of --domain-filter; without
+# this binding the call returns 403 and no records are ever written.
+resource "google_project_iam_member" "dns_zones_reader" {
+  for_each = toset(var.dns_zones_reader_service_accounts)
+
+  project = var.project_id
+  role    = "roles/dns.reader"
+  member  = "serviceAccount:${each.value}"
+}
