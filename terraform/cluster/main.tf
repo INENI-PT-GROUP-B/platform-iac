@@ -57,15 +57,16 @@ resource "google_container_node_pool" "primary" {
   # proactively.
   initial_node_count = var.min_node_count
 
+  # initial_node_count is a creation-only field. Ignore changes so adopting
+  # this on an existing pool stays a no-op, and so later bumps to
+  # var.min_node_count never trigger a node-pool replace.
+  lifecycle {
+    ignore_changes = [initial_node_count]
+  }
+
   autoscaling {
     min_node_count = var.min_node_count
     max_node_count = var.max_node_count
-  }
-
-  # The autoscaler owns the pool size after creation; ignore drift on the
-  # field so subsequent applies do not fight scale-up/scale-down decisions.
-  lifecycle {
-    ignore_changes = [initial_node_count]
   }
 
   management {
