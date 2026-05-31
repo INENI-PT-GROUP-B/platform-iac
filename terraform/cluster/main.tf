@@ -50,6 +50,20 @@ resource "google_container_node_pool" "primary" {
   location = var.zone
   cluster  = google_container_cluster.this.name
 
+  # Create the pool at the autoscaler's minimum so a fresh `terraform apply`
+  # produces a cluster that is immediately sized for the platform baseline.
+  # Without this, the pool would be created at size 1 and only grow once
+  # pods become unschedulable — the autoscaler does not enforce minNodeCount
+  # proactively.
+  initial_node_count = var.min_node_count
+
+  # initial_node_count is a creation-only field. Ignore changes so adopting
+  # this on an existing pool stays a no-op, and so later bumps to
+  # var.min_node_count never trigger a node-pool replace.
+  lifecycle {
+    ignore_changes = [initial_node_count]
+  }
+
   autoscaling {
     min_node_count = var.min_node_count
     max_node_count = var.max_node_count
