@@ -1,0 +1,24 @@
+---
+# Ingress on hello.fhuebung.lol. No tls: block — Traefik's default TLSStore
+# serves the *.fhuebung.lol wildcard cert (issued by cert-manager via
+# traefik/certificate.yaml in platform-gitops) for any non-matching SNI.
+# ExternalDNS creates the A record automatically from the host below
+# (sources: service,ingress; policy: sync per traefik values).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+  namespace: validation-day1
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: hello.fhuebung.lol
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hello
+                port:
+                  name: http
