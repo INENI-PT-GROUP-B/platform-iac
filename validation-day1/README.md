@@ -22,9 +22,8 @@ captured evidence.
 Assuming `cwd` is `platform-iac/`:
 
 ```bash
-# Seed the GSM source secret (replace value with anything identifying)
-echo -n 'gitops-23-validation-payload' | gcloud secrets create validation-day1-test \
-  --replication-policy=automatic --data-file=- --project=dotted-axle-495612-f4
+# Seed the GSM source secret first — see VALIDATION.md § Seed the GSM source
+# secret for the exact command and payload.
 
 kubectl apply -f validation-day1/
 ```
@@ -34,4 +33,7 @@ kubectl apply -f validation-day1/
 ```bash
 kubectl delete namespace validation-day1
 gcloud secrets delete validation-day1-test --project=dotted-axle-495612-f4 --quiet
+
+# Allow ~60 s for ExternalDNS to remove the A + TXT records before querying
+# Cloud DNS; sync interval depends on the external-dns chart values.
 ```
