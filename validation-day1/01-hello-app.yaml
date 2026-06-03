@@ -1,0 +1,73 @@
+---
+# Minimal nginx serving a static "hello" page. Backs the AC1 + AC2 assertions
+# (HTTPS 200 + ExternalDNS record creation).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-index
+  namespace: validation-day1
+data:
+  index.html: |
+    <!doctype html>
+    <html><head><title>Day-1 validation</title></head>
+    <body><h1>hello from validation-day1</h1></body></html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: validation-day1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: index
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          # cpu limit intentionally omitted to avoid throttling; memory limit
+          # bounds the OOM blast radius. Matches the convention in
+          # platform-gitops/values/* (cert-manager, ESO, CloudNativePG).
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+      volumes:
+        - name: index
+          configMap:
+            name: hello-index
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  namespace: validation-day1
+spec:
+  selector:
+    app: hello
+  ports:
+    - port: 80
+      targetPort: http
+      name: http

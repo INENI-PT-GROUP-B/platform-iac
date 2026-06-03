@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: validation-day1
+  labels:
+    purpose: day1-e2e-validation
