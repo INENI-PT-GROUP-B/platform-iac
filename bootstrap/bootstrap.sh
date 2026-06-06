@@ -13,6 +13,12 @@
 #                         Manager from an operator-supplied PAT; tenant
 #                         ExternalSecrets sync from this GSM entry. Skipped
 #                         with a warn if GHCR_TOKEN is unset (see § Phase 1a)
+#   1b grafana seed     — write the Grafana admin credentials into Google
+#                         Secret Manager as `grafana-admin` (JSON object with
+#                         `admin-user` / `admin-password` keys). ESO syncs
+#                         them into the `monitoring` namespace for the
+#                         kube-prometheus-stack Grafana. Skipped with a warn
+#                         if GRAFANA_ADMIN_PASSWORD is unset (see § Phase 1b)
 #   2  state + zone     — create the GCS state bucket and the persistent DNS
 #                         zone if absent, then `terraform init`
 #   3  terraform apply  — provision network, cluster, IAM, DNS bindings, backup
@@ -91,6 +97,17 @@ DNS_ZONE_DESCRIPTION="Public zone for the platform domain"
 # and any non-empty value works against ghcr.io.
 GHCR_GSM_SECRET_ID="shared-ghcr-pull-secret"
 GHCR_USERNAME_DEFAULT="ineni-pt-group-b"
+
+# Grafana admin credentials parameters (Phase 1b). The GSM secret holds a JSON
+# object `{"admin-user": "...", "admin-password": "..."}` that ESO syncs into
+# the `monitoring` namespace as the `grafana-admin-credentials` K8s Secret —
+# see platform-gitops monitoring/grafana-admin-externalsecret.yaml, whose
+# `dataFrom.extract` decomposes the JSON into the `admin-user` / `admin-password`
+# keys the chart's grafana.admin.{userKey,passwordKey} reads. Username default
+# is `admin`, matching Grafana's chart-default expectation; the password has
+# no default and is required.
+GRAFANA_GSM_SECRET_ID="grafana-admin"
+GRAFANA_USERNAME_DEFAULT="admin"
 
 # Argo CD install parameters (Phase 5). The chart version is pinned (no floating
 # version) per CONTRIBUTING § Tool Versions in CI; bump it deliberately.
@@ -257,6 +274,94 @@ else
   # Zero out the rendered payload from this shell's memory; the variable is no
   # longer needed and any subprocess inheriting the env would otherwise see it.
   unset auth_b64 payload
+fi
+
+# --- Phase 1b: seed Grafana admin credentials in GSM --------------------------
+# Materialises the Grafana admin user/password into a Google Secret Manager
+# entry consumed by ESO in the `monitoring` namespace (platform-gitops S4-01,
+# `monitoring/grafana-admin-externalsecret.yaml`). The ExternalSecret's
+# `dataFrom.extract` splits the JSON keys into the K8s Secret data keys
+# `admin-user` / `admin-password`, which the kube-prometheus-stack chart
+# reads via grafana.admin.{userKey,passwordKey}.
+#
+# The password is operator-supplied via bootstrap.env (no chart default; the
+# upstream Grafana default `admin/prom-operator` is unacceptable for an
+# internet-exposed host). When unset, this phase is skipped with a warn —
+# Day-1 cluster bring-up succeeds; the monitoring stack comes up but Grafana
+# stays unavailable (Pod stuck waiting for the admin Secret) until the seed
+# runs.
+#
+# Idempotent — same shape as Phase 1a: create-if-absent for the secret
+# container; add a new SecretVersion only when the rendered JSON differs
+# byte-for-byte from the latest version. A re-run with the same password is
+# a no-op; a re-run with a rotated password adds exactly one new SecretVersion.
+#
+# Log hygiene: bootstrap.log captures stdout+stderr, so neither the password
+# nor the rendered payload is ever printed. Only the GSM ID and version
+# metadata land in the log.
+PHASE="phase 1b"
+if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
+  log "GRAFANA_ADMIN_PASSWORD not set — skipping grafana-admin seed"
+  log "  Grafana will stay unavailable until GRAFANA_ADMIN_PASSWORD is set and this phase re-runs"
+else
+  grafana_username="${GRAFANA_ADMIN_USER:-${GRAFANA_USERNAME_DEFAULT}}"
+  log "seeding ${GRAFANA_GSM_SECRET_ID} in Google Secret Manager (user: ${grafana_username})"
+
+  # The JSON payload uses the key names the ExternalSecret's `dataFrom.extract`
+  # expects (admin-user / admin-password). The username field has no special
+  # characters by convention (default "admin"); the password may contain any
+  # printable character — we escape backslashes and double quotes by hand
+  # rather than depend on jq (kept the script jq-free, see Phase 1a). Both
+  # backslash and double quote are the only characters JSON forbids inside a
+  # string literal without escaping.
+  escaped_user="${grafana_username//\\/\\\\}"
+  escaped_user="${escaped_user//\"/\\\"}"
+  escaped_pw="${GRAFANA_ADMIN_PASSWORD//\\/\\\\}"
+  escaped_pw="${escaped_pw//\"/\\\"}"
+  payload="{\"admin-user\":\"${escaped_user}\",\"admin-password\":\"${escaped_pw}\"}"
+
+  if gcloud secrets describe "${GRAFANA_GSM_SECRET_ID}" \
+    --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+    log "secret ${GRAFANA_GSM_SECRET_ID} already exists, checking latest version"
+    access_err="$(mktemp)"
+    if current="$(gcloud secrets versions access latest \
+      --secret="${GRAFANA_GSM_SECRET_ID}" \
+      --project="${GCP_PROJECT_ID}" 2>"${access_err}")"; then
+      rm -f "${access_err}"
+      if [[ "${current}" == "${payload}" ]]; then
+        log "latest version matches current credentials, no new version added"
+      else
+        log "payload differs from latest version, adding new SecretVersion"
+        printf '%s' "${payload}" | gcloud secrets versions add "${GRAFANA_GSM_SECRET_ID}" \
+          --project="${GCP_PROJECT_ID}" \
+          --data-file=- >/dev/null
+      fi
+    else
+      access_msg="$(cat "${access_err}")"
+      rm -f "${access_err}"
+      if [[ "${access_msg}" == *"NOT_FOUND"* ]]; then
+        log "secret container exists without an enabled version, adding initial SecretVersion"
+        printf '%s' "${payload}" | gcloud secrets versions add "${GRAFANA_GSM_SECRET_ID}" \
+          --project="${GCP_PROJECT_ID}" \
+          --data-file=- >/dev/null
+      else
+        err "cannot read latest version of ${GRAFANA_GSM_SECRET_ID}:"
+        err "${access_msg}"
+        err "operator account likely lacks secretmanager.versions.access — grant roles/secretmanager.admin"
+        exit 1
+      fi
+    fi
+  else
+    log "creating secret ${GRAFANA_GSM_SECRET_ID} with initial version"
+    printf '%s' "${payload}" | gcloud secrets create "${GRAFANA_GSM_SECRET_ID}" \
+      --project="${GCP_PROJECT_ID}" \
+      --replication-policy=automatic \
+      --data-file=- >/dev/null
+  fi
+
+  # Zero out the rendered payload + escapes; the unset prevents subprocess
+  # inheritance from leaking either field.
+  unset escaped_user escaped_pw payload
 fi
 
 # --- Phase 2: state bucket, DNS zone, terraform init --------------------------
