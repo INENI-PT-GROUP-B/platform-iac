@@ -13,7 +13,9 @@
 # CONTRACT WITH S2-02 (platform-gitops/applications/root.yaml, am): the spec
 # below MUST stay byte-for-byte equivalent to applications/root.yaml. Any
 # divergence leaves the root Application permanently OutOfSync (self-heal would
-# fight the local apply on every bootstrap re-run).
+# fight the local apply on every bootstrap re-run). Enforced pre-merge by
+# .github/workflows/root-app-spec-identity.yml (caller of the org-wide reusable
+# defined in INENI-PT-GROUP-B/.github). See platform-gitops#29.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
