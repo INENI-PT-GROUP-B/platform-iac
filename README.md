@@ -52,6 +52,20 @@ This creates a chicken-and-egg problem: `terraform init` needs the bucket to exi
 
   Like the DNS Zone IAM Admin grant above, this is an operator-account prerequisite, not Terraform-managed — Terraform cannot grant the permissions it needs in order to run.
 
+- `roles/secretmanager.admin` on the project for the operator. Phase 1a both writes new `SecretVersion`s (`secretmanager.versions.add`) and reads the latest version back (`secretmanager.versions.access`) to short-circuit a re-run when the payload is unchanged. The read permission is **not** part of `roles/editor`, so without this grant Phase 1a aborts with a clear `PERMISSION_DENIED` and the hint to grant the role:
+
+  ```bash
+  gcloud projects add-iam-policy-binding dotted-axle-495612-f4 \
+    --member="user:<operator-email>" \
+    --role="roles/secretmanager.admin"
+  ```
+
+  The phase intentionally fails loudly rather than treating the read failure as "payload differs" — otherwise the SecretVersion list would grow by one entry on every bootstrap run.
+
+- **Optional:** a GitHub PAT in `GHCR_TOKEN` (in `bootstrap/bootstrap.env`) for Phase 1a to seed the shared GHCR pull secret into Google Secret Manager. The PAT only needs `read:packages` on the org's packages — this is the smallest scope that lets kubelet pull the private `app-frontend` image. The username defaults to the org slug (`ineni-pt-group-b`) and can be overridden via `GHCR_USERNAME`; for ghcr.io PAT auth the username is informational and any non-empty value works.
+
+  When `GHCR_TOKEN` is unset, Phase 1a logs a warn and continues. Day-1 cluster bring-up still succeeds; tenant frontend image pulls then fail at runtime until the token is set and `bootstrap.sh` re-runs. The phase is idempotent: a re-run with the same token is a no-op, a re-run with a rotated token adds exactly one new SecretVersion in GSM. GitHub PATs typically expire after one year — rotate by updating `GHCR_TOKEN` and re-running `bootstrap.sh`.
+
 ### Run
 
 1. Create your local bootstrap config from the committed example and adjust the values:
@@ -75,6 +89,7 @@ The script runs the following phases in order:
 
 - **Phase 0 — preflight:** checks the required CLIs, an active `gcloud` account, present Application Default Credentials, asserts that the state-bucket name in `terraform/backend.tf` matches `${GCP_PROJECT_ID}-tfstate`, and sets the active project.
 - **Phase 1 — enable APIs:** idempotently enables the GCP APIs the platform needs (Compute, GKE, Cloud DNS, IAM, IAM Credentials, Resource Manager, Secret Manager, Storage, Service Usage). IAM Credentials is required for the Workload Identity token-minting calls that ExternalDNS, cert-manager, ESO, and Crossplane provider-gcp perform at runtime.
+- **Phase 1a — GHCR pull-secret seed:** renders the dockerconfigjson for `ghcr.io` from `GHCR_TOKEN` and writes it into the `shared-ghcr-pull-secret` entry in Google Secret Manager (create-if-absent; new SecretVersion only when the payload differs from the latest). The per-tenant Crossplane Composition (`platform-gitops` S3-05) wires an `ExternalSecret` that pulls this entry into each tenant namespace as `ghcr-pull-secret`. Skipped with a warn when `GHCR_TOKEN` is unset.
 - **Phase 2 — state bucket, DNS zone, init:** creates `gs://<project>-tfstate` (uniform bucket-level access, object versioning) and the persistent `platform-zone` Cloud DNS zone if they do not yet exist, then runs `terraform init`.
 - **Phase 3 — apply:** runs `terraform apply` to provision the network, GKE cluster, IAM service accounts and Workload Identity bindings, DNS IAM bindings, and the backup bucket.
 - **Phase 4 — kubeconfig:** fetches cluster credentials via `gcloud container clusters get-credentials`, so `kubectl` is ready against the new cluster.
