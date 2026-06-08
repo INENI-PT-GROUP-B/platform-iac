@@ -85,8 +85,23 @@ resource "google_service_account_iam_member" "crossplane_provider_gcp_wi" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.crossplane_namespace}/${var.crossplane_provider_gcp_ksa_name}]"
 }
 
-resource "google_project_iam_member" "crossplane_provider_gcp_secret_version_adder" {
+# BasicAuth chain needs the provider-gcp Workload-Identity SA to manage the
+# tenant-<name>-basicauth-htpasswd Secret containers in GSM end-to-end: create,
+# observe (.get) and add versions. The previously narrower
+# roles/secretmanager.secretVersionAdder only covered versions.add, so
+# Crossplane's Observe-then-Reconcile loop failed at the initial .get with 403
+# on every tenant. Broadened to admin; the SA stays scoped to the BasicAuth
+# flow by design (no other component shares this Workload Identity binding).
+# Surfaced live by INENI-PT-GROUP-B/platform-gitops#62.
+resource "google_project_iam_member" "crossplane_provider_gcp_secretmanager_admin" {
   project = var.project_id
-  role    = "roles/secretmanager.secretVersionAdder"
+  role    = "roles/secretmanager.admin"
   member  = "serviceAccount:${google_service_account.crossplane_provider_gcp.email}"
+}
+
+# Terraform state migration for the rename from
+# crossplane_provider_gcp_secret_version_adder when the role was bumped.
+moved {
+  from = google_project_iam_member.crossplane_provider_gcp_secret_version_adder
+  to   = google_project_iam_member.crossplane_provider_gcp_secretmanager_admin
 }
