@@ -85,6 +85,20 @@ resource "google_service_account_iam_member" "crossplane_provider_gcp_wi" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.crossplane_namespace}/${var.crossplane_provider_gcp_ksa_name}]"
 }
 
+# provider-gcp-storage (added for per-tenant CNPG backup bucket IAM,
+# platform-gitops#67) runs as its own controller pod with its own KSA — the
+# DeploymentRuntimeConfig serviceAccountTemplate is per-Provider-owned
+# (crossplane/crossplane#4552) — but impersonates the same
+# crossplane-provider-gcp GSA: its only GCP-side job is editing the pg-backups
+# bucket IAM policy, which that GSA's pgBackupsBucketIamAdmin custom role
+# (./backup module) already covers. A dedicated GSA would add IaC surface
+# without narrowing any privilege.
+resource "google_service_account_iam_member" "crossplane_provider_gcp_storage_wi" {
+  service_account_id = google_service_account.crossplane_provider_gcp.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.crossplane_namespace}/${var.crossplane_provider_gcp_storage_ksa_name}]"
+}
+
 # BasicAuth chain needs the provider-gcp Workload-Identity SA to manage the
 # tenant-<name>-basicauth-htpasswd Secret containers in GSM end-to-end: create,
 # observe (.get) and add versions. The previously narrower

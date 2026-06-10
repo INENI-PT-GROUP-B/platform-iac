@@ -87,6 +87,12 @@ variable "crossplane_provider_gcp_ksa_name" {
   default     = "provider-gcp"
 }
 
+variable "crossplane_provider_gcp_storage_ksa_name" {
+  description = "Kubernetes Service Account name used by Crossplane provider-gcp-storage (matches its DeploymentRuntimeConfig in platform-gitops, added for per-tenant pg-backups bucket IAM in platform-gitops#67)"
+  type        = string
+  default     = "provider-gcp-storage"
+}
+
 variable "crossplane_namespace" {
   description = "Kubernetes namespace where Crossplane and its providers run"
   type        = string
