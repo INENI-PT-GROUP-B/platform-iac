@@ -55,6 +55,36 @@ err() {
   printf '[%s] error: %s\n' "${PHASE:-bootstrap}" "$*" >&2
 }
 
+# Map a probed IAM permission to the smallest role (standard or
+# project-custom) that grants it, so the Phase 0 preflight failure points
+# the operator at the exact remediation from README § Prerequisites.
+permission_hint() {
+  case "$1" in
+    dns.managedZones.getIamPolicy|dns.managedZones.setIamPolicy)
+      printf 'custom role projects/%s/roles/dnsZoneIamAdmin (see README § Prerequisites)' \
+        "${GCP_PROJECT_ID}"
+      ;;
+    container.roles.delete)
+      printf 'roles/container.admin'
+      ;;
+    secretmanager.versions.add|secretmanager.versions.access)
+      printf 'roles/secretmanager.admin'
+      ;;
+    storage.buckets.create)
+      printf 'roles/storage.admin'
+      ;;
+    dns.managedZones.create)
+      printf 'roles/dns.admin'
+      ;;
+    iam.roles.create)
+      printf 'roles/iam.roleAdmin'
+      ;;
+    *)
+      printf 'grant a role that includes %s' "$1"
+      ;;
+  esac
+}
+
 # Required GCP APIs, derived from the resources the Terraform code provisions:
 #   compute        — VPC, subnet, firewall, GKE nodes
 #   container      — GKE cluster and node pool
@@ -79,6 +109,25 @@ REQUIRED_APIS=(
   secretmanager.googleapis.com
   storage.googleapis.com
   serviceusage.googleapis.com
+)
+
+# Operator IAM permissions probed by Phase 0 to fail fast if the operator
+# has not satisfied README § Prerequisites. Each entry corresponds to a
+# specific phase that would otherwise abort mid-run (e.g. Phase 3's DNS
+# zone IAM binding, Phase 5's Argo CD Helm pre-install hook). The probe
+# is a narrow drift sensor — every permission here maps to either a
+# README-documented prerequisite or an early-phase failure mode observed
+# during S2-08. It is not a generic IAM audit of the Terraform modules.
+# Keep permission_hint() in sync with this list.
+REQUIRED_OPERATOR_PERMISSIONS=(
+  storage.buckets.create
+  dns.managedZones.create
+  dns.managedZones.getIamPolicy
+  dns.managedZones.setIamPolicy
+  iam.roles.create
+  container.roles.delete
+  secretmanager.versions.add
+  secretmanager.versions.access
 )
 
 # DNS zone parameters for the create-if-absent step (see DNS_SETUP.md). The zone
@@ -182,6 +231,32 @@ fi
 
 log "setting active project to ${GCP_PROJECT_ID}"
 gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
+
+# Probe the operator's effective IAM against the permissions later phases
+# depend on (see REQUIRED_OPERATOR_PERMISSIONS above). One batched
+# `test-iam-permissions` call is enough — the underlying
+# cloudresourcemanager.projects.testIamPermissions API accepts up to 100
+# permissions per request. Reflects the *effective* permission set,
+# including custom roles and group inheritance, so this catches operators
+# whose grants come from a custom role with a different name.
+log "verifying operator IAM permissions"
+granted_permissions="$(gcloud projects test-iam-permissions "${GCP_PROJECT_ID}" \
+  --permissions="$(IFS=,; echo "${REQUIRED_OPERATOR_PERMISSIONS[*]}")" \
+  --format='value(permissions)')"
+missing_permissions=()
+for perm in "${REQUIRED_OPERATOR_PERMISSIONS[@]}"; do
+  # Heredoc avoids the SIGPIPE-under-pipefail caveat noted above the
+  # gcloud auth list check.
+  grep -qxF "${perm}" <<<"${granted_permissions}" || missing_permissions+=("${perm}")
+done
+if (( ${#missing_permissions[@]} > 0 )); then
+  err "operator is missing ${#missing_permissions[@]} IAM permission(s) on ${GCP_PROJECT_ID}:"
+  for perm in "${missing_permissions[@]}"; do
+    err "  - ${perm}  →  $(permission_hint "${perm}")"
+  done
+  err "see README.md § Prerequisites for the exact gcloud grant commands"
+  exit 1
+fi
 
 # --- Phase 1: enable GCP APIs -------------------------------------------------
 PHASE="phase 1"
