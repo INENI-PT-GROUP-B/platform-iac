@@ -104,8 +104,10 @@ Expected: each command lists nothing project-managed. Anything left over from th
 
 Phase-by-phase expectation:
 
-- **Phase 0** — preflight passes; auth is still active from the previous session.
+- **Phase 0** — preflight passes; auth is still active from the previous session. With `platform-iac#64` merged, the operator-IAM probe also runs here and fails fast on missing permissions before any cloud work begins.
 - **Phase 1** — APIs already enabled, `gcloud services enable` is a no-op.
+- **Phase 1a** — shared GHCR pull-secret seed. With `GHCR_TOKEN` set to the same value as the previous bootstrap, the latest GSM version matches the rendered dockerconfigjson and no new SecretVersion is added (idempotent). With `GHCR_TOKEN` unset, the phase skips with a warn — the GSM entry from the previous bootstrap survives and tenant frontend pulls keep working.
+- **Phase 1b** — Grafana admin credentials seed. Same idempotency pattern as 1a: identical `GRAFANA_ADMIN_PASSWORD` → no new version; unset → skip with warn, GSM entry persists.
 - **Phase 2** — state bucket and DNS zone survived, both create-if-absent paths skip to existing.
 - **Phase 3** — `terraform apply` provisions everything fresh (~7-10 min, cluster create dominates).
 - **Phase 4** — `gcloud container clusters get-credentials` rewrites the kubeconfig entry against the new cluster.
@@ -137,8 +139,9 @@ curl -sS -o /dev/null \
 - The chain that needed manual `gcloud` workarounds during the first end-to-end run is now Terraform-managed and the cold-start path is dry: ExternalDNS gets `roles/dns.reader` from `terraform/dns/` (#43, #44) and writes records on the first poll instead of looping on 403.
 - The state bucket is reused (terraform init finds the backend immediately).
 - GKE cleans up its LoadBalancer artefacts on cluster destroy (Phase C).
+- The operator-IAM preflight added in [`platform-iac#64`](https://github.com/INENI-PT-GROUP-B/platform-iac/pull/64) runs on the real operator account and fails fast on missing permissions (or no-ops when all required roles are held).
+- GSM persistence holds across teardown: the shared GHCR pull-secret entry and the Grafana admin credentials survive `terraform destroy` (GSM is outside Terraform). On rebootstrap, Phase 1a/1b either no-op with the same values or skip with a warn when the env vars are unset — the GSM entries persist regardless.
 
 ## What this run does not validate
 
 - The `roles/container.admin` README prerequisite — the operator running this teardown already holds it. Validating the prereq requires a fresh operator account or temporarily removing the role (not recommended).
-- The bootstrap preflight hardening tracked in [#45](https://github.com/INENI-PT-GROUP-B/platform-iac/issues/45) — out of scope.
