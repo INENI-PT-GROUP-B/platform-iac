@@ -12,7 +12,16 @@ resource "google_storage_bucket" "pg_backups" {
   name                        = "${var.project_id}-pg-backups"
   location                    = var.region
   uniform_bucket_level_access = true
-  force_destroy               = false
+
+  # Destroy the bucket together with the rest of the platform on a
+  # `terraform destroy`. Backup objects are not promised to survive a
+  # teardown — the persistent set is `tfstate`, the Cloud DNS zone, and
+  # the GSM secrets. See `platform-gitops/docs/cluster-redeploy-validation.md`
+  # § Persistence-boundary inventory (S4-04b, `platform-gitops#65`) and
+  # `TEARDOWN.md` § Phase B. Without this, a populated bucket blocks
+  # `terraform destroy` with `Error trying to delete bucket ... without
+  # force_destroy set to true`, surfaced live on 2026-06-15.
+  force_destroy = true
 
   versioning {
     enabled = false
