@@ -113,7 +113,7 @@ Skipping Phase A is not catastrophic — ExternalDNS reclaims its records on the
 Known issue on `platform-iac` `main`: `module.backup.google_storage_bucket.pg_backups` is created without `force_destroy = true` (`platform-iac#67`). Until #67 lands, a populated bucket blocks `terraform destroy` — empty the bucket first:
 
 ```bash
-gcloud storage rm -r --recursive "gs://${GCP_PROJECT_ID}-pg-backups/**"
+gcloud storage rm --recursive "gs://${GCP_PROJECT_ID}-pg-backups/**"
 # Backup objects are not promised to survive a teardown; see § Phase B
 # Destroyed below.
 ```
