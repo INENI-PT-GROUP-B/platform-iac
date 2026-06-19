@@ -196,7 +196,7 @@ export TF_VAR_zone="${GCP_ZONE}"
 PHASE="phase 0"
 log "preflight checks"
 
-for cli in gcloud terraform kubectl helm; do
+for cli in gcloud terraform kubectl helm jq; do
   if ! command -v "${cli}" >/dev/null 2>&1; then
     err "${cli} not found on PATH; install it before running bootstrap"
     exit 1
@@ -240,9 +240,27 @@ gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
 # including custom roles and group inheritance, so this catches operators
 # whose grants come from a custom role with a different name.
 log "verifying operator IAM permissions"
-granted_permissions="$(gcloud projects test-iam-permissions "${GCP_PROJECT_ID}" \
-  --permissions="$(IFS=,; echo "${REQUIRED_OPERATOR_PERMISSIONS[*]}")" \
-  --format='value(permissions)')"
+# gcloud SDK 572.0.0 has no `gcloud projects test-iam-permissions` wrapper
+# (verified across stable/alpha/beta), so call the underlying REST endpoint
+# directly with the ADC bearer token verified above.
+access_token="$(gcloud auth application-default print-access-token)"
+permissions_json="$(printf '%s\n' "${REQUIRED_OPERATOR_PERMISSIONS[@]}" \
+  | jq -R . | jq -s '{permissions: .}')"
+iam_response="$(curl -sS -X POST \
+  -H "Authorization: Bearer ${access_token}" \
+  -H "Content-Type: application/json" \
+  -d "${permissions_json}" \
+  "https://cloudresourcemanager.googleapis.com/v1/projects/${GCP_PROJECT_ID}:testIamPermissions")"
+
+# Surface API-level errors (invalid token, project not found, etc.) before
+# treating an empty .permissions as "all missing".
+if jq -e '.error' >/dev/null 2>&1 <<<"${iam_response}"; then
+  err "testIamPermissions API call failed:"
+  err "  $(jq -r '.error.message' <<<"${iam_response}")"
+  exit 1
+fi
+
+granted_permissions="$(jq -r '.permissions[]?' <<<"${iam_response}")"
 missing_permissions=()
 for perm in "${REQUIRED_OPERATOR_PERMISSIONS[@]}"; do
   # Heredoc avoids the SIGPIPE-under-pipefail caveat noted above the
@@ -292,7 +310,7 @@ else
 
   # Render the dockerconfigjson payload. The base64 output of `username:token`
   # is guaranteed to contain only [A-Za-z0-9+/=], so direct string interpolation
-  # into the JSON template is safe — no escaping needed, no jq dependency.
+  # into the JSON template is safe — no escaping needed.
   # `base64 -w0` prevents line-wrapping (coreutils on Linux; macOS default emits
   # one line already).
   auth_b64="$(printf '%s:%s' "${ghcr_username}" "${GHCR_TOKEN}" | base64 -w0)"
@@ -385,10 +403,9 @@ else
   # The JSON payload uses the key names the ExternalSecret's `dataFrom.extract`
   # expects (admin-user / admin-password). The username field has no special
   # characters by convention (default "admin"); the password may contain any
-  # printable character — we escape backslashes and double quotes by hand
-  # rather than depend on jq (kept the script jq-free, see Phase 1a). Both
-  # backslash and double quote are the only characters JSON forbids inside a
-  # string literal without escaping.
+  # printable character — we escape backslashes and double quotes by hand.
+  # Both backslash and double quote are the only characters JSON forbids
+  # inside a string literal without escaping.
   escaped_user="${grafana_username//\\/\\\\}"
   escaped_user="${escaped_user//\"/\\\"}"
   escaped_pw="${GRAFANA_ADMIN_PASSWORD//\\/\\\\}"
