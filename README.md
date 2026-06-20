@@ -133,3 +133,11 @@ The root module under `terraform/` composes the per-concern child modules:
 - `dns/` — Public Cloud DNS managed zone for the platform domain `fhuebung.lol`, with zone-scoped `roles/dns.admin` bindings for the ExternalDNS and cert-manager service accounts
 - `iam/` — Google Service Accounts and Workload Identity bindings for in-cluster platform workloads (ExternalDNS, cert-manager, ESO, Crossplane provider-gcp)
 - `backup/` — Shared GCS bucket for CloudNativePG per-tenant database backups (Barman, 30-day retention), with bucket-scoped IAM letting Crossplane provider-gcp add per-tenant prefix-scoped write bindings
+
+## Related docs
+
+- Platform entry point and cross-cutting documentation: [`INENI-PT-GROUP-B/platform`](https://github.com/INENI-PT-GROUP-B/platform)
+- Day-1 architecture diagram: [`platform/docs/architecture/day1-bootstrap.drawio.png`](https://github.com/INENI-PT-GROUP-B/platform/blob/main/docs/architecture/day1-bootstrap.drawio.png)
+- DNS zone lifecycle (persistent, not Terraform-managed): [`DNS_SETUP.md`](DNS_SETUP.md)
+- Teardown / rebootstrap from cold: [`TEARDOWN.md`](TEARDOWN.md)
+- Argo CD reconciliation target after bootstrap: [`INENI-PT-GROUP-B/platform-gitops`](https://github.com/INENI-PT-GROUP-B/platform-gitops)
